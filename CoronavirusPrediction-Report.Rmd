@@ -1,0 +1,1025 @@
+---
+title: "HarvardX: PH125.9x Data Science: Capstone - Choose Your Own. Coronavirus Prediction"
+author: "Carlos Mayora"
+date: "5/19/2020"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+\newpage
+
+# Introduction
+
+Coronaviruses are a large group of viruses that can cause illness in animals and humans. Some coronaviruses commonly circulate in the air and usually cause upper respiratory symptoms such as cough or runny nose, although some can cause more serious illness.
+
+The 2019 novel (new) coronavirus causes the illness Coronavirus disease (COVID-19), which is an infectious disease caused by a newly discovered coronavirus, it was identified in late 2019 and was declared a pandemic on March 11 2020. At the beginning, local hospitals in Wuhan City, Hubei Province, China, were reported unusual number of patients who comes with severe pneumonia without knowing cause and not responds to any kind of vaccine or medicine. Besides, these cases were further increased because of human to human transmission, and doctors confirmed that this unknown disease had similar epidemic of Severe Acute Respiratory Syndrome (SARS)2 in 2002 and the agent causing this disease was recognized as a coronavirus. 
+
+The disease started as a local epidemic of Wuhan, China, but it quickly escalated all over the world, being transmitted by international travelers, making it an international public health emergency. There is no scientific evidence for where it has originated although is believed to have originally occurred from animal-to-person contact and spreads person-to-person.
+
+Coronaviruses like COVID-19 are most often spread through the air by coughing or sneezing, through close personal contact (including touching and shaking hands) or through touching your nose, mouth or eyes before washing your hands. This is a new disease and we are still learning about how it spreads and the severity of illness it causes.
+
+Most people infected with the COVID-19 virus will experience mild to moderate respiratory illness and recover without requiring special treatment.  Older people, and those with underlying medical problems like cardiovascular disease, diabetes, chronic respiratory disease, and cancer are more likely to develop serious illness.
+
+COVID-19 has turned the world upside down, most of the countries are currently in some degree of “lockdown”, with restaurants, bars, shops, schools and gyms closed, and citizens required, or at least strongly encouraged, to stay home to avoid catching or spreading COVID-19. This has impacted everything, how we live and interact with each other, how we work and communicate, how we move around and travel. Every aspect of our lives has been affected.
+
+Data is critical to understand the global COVID-19 pandemic. Decisions made now and in the upcoming months will be some of the most important made in generations. They will affect people all around the world for years to come. It is imperative that governments making those decisions have access to the best information available.
+
+## Project Goal
+
+The aim of this report is to predict whether a COVID-19 pacient in Colombia will recover or not. We will use data from the National Health Institute of Colombia (Instituto Nacional de Salud) from where we will create a subset of the data (training set) and train using machine learning algorithms to predict the outcome in the prediction set, this prediction set will be all the current active cases which we don't know the outcome yet.
+
+We will apply different machine learning algorithms and compare the accuracy --- DESARROLLARRR
+
+## Dataset
+
+For this project we will use the data provided by the National Health Institute of Colombia, which is available through a CSV file with all the [COVID-19 cases in Colombia](https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr), basically this file contains the historic of all COVID-19 cases in Colombia.
+
+We will download and read the CSV file, with the following information:
+
+* ID de caso: unique identifier of the record.
+* Fecha de notificacion: date when was notified to the National Health Institute.
+* Codigo DIVIPOLA: municipality code.
+* Ciudad de ubicacion: City where the patient is located.
+* Departamento o Distrito: State where the patient is located.
+* atencion: outcome including the of type of medical atention, like recovered or death, or UCI, home or hospital.
+* Edad: age of the patient.
+* Sexo: sex of the patient.
+* Tipo: type and status of the case, imported from other country, in analysis.
+* Estado: severity of the case.
+* Pais de procedencia: contagion Country.
+* FIS: date when the symptoms started. We will use this date as the start date for the case.
+* Fecha de muerte: date of death (if applies).
+* Fecha diagnostico: date of diagnostic, basically is the date when the case is confirmed by the medical lab analysis.
+* Fecha recuperado: recovery date (if applies).
+* fecha reporte web: date when the case was registered on the web site.
+* Tipo recuperacion: recovery type, two possible values: PCR, second negative medical test and Tiempo which is considered recovered after 30 days without symptoms.
+
+In following sections we will work on transforming this dataset to make columns and values English readable.
+
+\newpage
+
+# Data Analysis
+
+## Data Ingestion
+
+For purpose of this project we have already downloaded the .csv file provided by the National Health Institute of Colombia, next we will read and load the data in to a dataset so we can use it in the analysis, also we are installing the packages we will need through out the project.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+################################
+# Load libraries and data
+################################
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(glmnet)) install.packages("glmnet", repos = "http://cran.us.r-project.org")
+if(!require(rpart)) install.packages("rpart", repos = "http://cran.us.r-project.org")
+if(!require(rattle)) install.packages("rattle", repos = "http://cran.us.r-project.org")
+if(!require(randomForest)) install.packages("randomForest", repos = "http://cran.us.r-project.org")
+
+# To make our coronavirus predictions we will use the data
+# repository for Colombia COVID-19 cases at
+# https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr
+
+coronavirus <- read.csv('Casos_positivos_de_COVID-19_en_Colombia.csv', 
+                        stringsAsFactors = FALSE, na.strings='')
+
+# New column was added on 06/11
+# removing this column to not break the entire code
+coronavirus <- coronavirus[1:(length(coronavirus)-1)]
+
+```
+
+## Data Exploration
+
+Before we start building out recovery predictions, we need to get familiar and understand the data structure of the dataset in order to build a better model. First let's get the number of rows and columns in the *coronavirus* dataset:
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# coronavirus dataset rows and columns
+dim(coronavirus)
+```
+
+Coronavirus dataset structure.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# coronavirus structure
+str(coronavirus)
+```
+
+We can see that the columns are all in Spanish, we will change the column names to make them more readable, and check the structure one more time. The name translation will be as follows:
+
+* ID de caso - id
+* Fecha de notificacion - record_date
+* Codigo DIVIPOLA - municipality_code 
+* Ciudad de ubicacion - city
+* Departamento o Distrito - state
+* atencion - outcome
+* Edad - age
+* Sexo - sex
+* Tipo - contagion_type
+* Estado - severity
+* Pais de procedencia - origin_country
+* FIS - symptoms_date
+* Fecha de muerte - date_of_death
+* Fecha diagnostico - diagnosis_date
+* Fecha recuperado - recovery_date
+* fecha reporte web - web_date
+* Tipo recuperacion - recovery_type
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+names(coronavirus) <- c('id','record_date','municipality_code','city','state','outcome',
+                        'age','sex', 'contagion_type','severity','origin_country', 'symptoms_date',
+                        'date_of_death','diagnosis_date','recovery_date','web_date','recovery_type')
+
+# coronavirus structure
+str(coronavirus)
+```
+
+Now we have changed the column names, let's get the first 6 rows of the *coronavirus* dataset.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# 6 first rows of coronavirus dataset including column names
+head(coronavirus)
+```
+
+We can confirm that the dataset contains 17 columns, whih we have described in the Dataset section.
+
+The dataset is not in tidy format, so before we continue we need to change the columns classes to date and factor accordingly and also translate the levels values.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Changing columns class to date and translating levels values
+coronavirus$record_date <- as.Date(coronavirus$record_date)
+coronavirus$municipality_code <- as.integer(coronavirus$municipality_code)
+coronavirus$date_of_death <- as.Date(coronavirus$date_of_death)
+coronavirus$city <- as.factor(coronavirus$city)
+coronavirus$state <- as.factor(coronavirus$state)
+coronavirus[,'outcome'] <- ifelse(coronavirus[,'outcome'] == "Recuperado", "recovered", 
+                            ifelse(coronavirus[,'outcome'] == "Fallecido", "deceased", 
+                              ifelse(coronavirus[,'outcome'] == "Hospital UCI", "icu", 
+                                ifelse(coronavirus[,'outcome'] == "Hospital", "hospitalized", 
+                                  ifelse(coronavirus[,'outcome'] == "Casa", "outpatientCare", 'unknown')))))
+
+coronavirus$outcome <- as.factor(coronavirus$outcome)
+coronavirus$sex <- as.factor(coronavirus$sex)
+coronavirus[,'contagion_type'] <- ifelse(coronavirus[,'contagion_type'] == "Importado", "travel","contact")
+coronavirus$contagion_type <- as.factor(coronavirus$contagion_type)
+coronavirus[,'severity'] <- ifelse(coronavirus[,'severity'] == "Leve", "low", 
+                              ifelse(coronavirus[,'severity'] == "Moderado", "medium", 
+                                ifelse(coronavirus[,'severity'] == "Grave", "high", 
+                                  ifelse(coronavirus[,'severity'] == "Fallecido", "death", 
+                                    ifelse(coronavirus[,'severity'] == "Asintomático", "asymptomatic", NA)))))
+coronavirus$severity <- as.factor(coronavirus$severity)
+coronavirus$origin_country <- as.factor(coronavirus$origin_country)
+coronavirus$symptoms_date <- as.Date(coronavirus$symptoms_date)
+coronavirus$date_of_death <- as.Date(coronavirus$date_of_death)
+coronavirus$diagnosis_date <- as.Date(coronavirus$diagnosis_date)
+coronavirus$recovery_date  <- as.Date(coronavirus$recovery_date)
+coronavirus$web_date  <- as.Date(coronavirus$web_date)
+coronavirus[,'recovery_type'] <- ifelse(coronavirus[,'recovery_type'] == "PCR", "negTest", 
+                                        ifelse(coronavirus[,'recovery_type'] == "Tiempo" | 
+                                                 coronavirus[,'recovery_type'] == "TIEMPO", "time", NA))
+coronavirus$recovery_type  <- as.factor(coronavirus$recovery_type)
+
+# coronavirus structure after tyding
+str(coronavirus)
+```
+
+Now the data is ready for exploration and analysis, each row represents a specific COVD-19 case in Colombia.
+
+Since *symptoms_date* is the date of the onset of symptoms for each pacient, we will consider this date to make any time analysis, so let's check the summary of the dataset, where we can see the min date (`r min(coronavirus$symptoms_date[!is.na(coronavirus$symptoms_date)])`) and max date (`r max(coronavirus$symptoms_date[!is.na(coronavirus$symptoms_date)])`), this represents the time frame of the COVID-1o cases in Colombia.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Basic summary statistics
+summary(coronavirus)
+```
+
+## COVID-19 Situation In Colombia
+
+All the world have been impacted by this pandemic, we can see the current situation in Colombia by getting the total confirmed cases number, total deaths, recovered and current active cases.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's get the current status on cases confirmed cases
+cat("The total number of confirmed cases is: ", nrow(coronavirus))
+cat("The total number of deaths is: ", sum(coronavirus$outcome == "deceased"))
+cat("The total number of recovered is: ", sum(coronavirus$outcome == "recovered"))
+cat("The total number of active cases is: ", nrow(coronavirus) - sum(coronavirus$outcome == "deceased") - 
+      sum(coronavirus$outcome == "recovered") - sum(coronavirus$outcome == "unknown"))
+```
+
+Let's see what states have been more impacted by COVID-19, first let's list and then plot the top 15 states with more confirmed cases.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Object with the total cases by state and type
+totals_state <- coronavirus %>%
+  group_by(state, outcome) %>%
+  summarize(total = n())
+
+# Let's get the list of the 15 most impacted states,
+# those with most confirmed cases
+totals_state %>% group_by(state) %>%
+  summarize(total_cases = sum(total)) %>% arrange(-total_cases) %>% head(15)
+
+# Variable with colos we will use for the following plots
+colors <- data.frame(
+  type = c("confirmed", "active", "deceased", "recovered"),
+  fill = c("#2E9AFE", "#F2F5A9", "#FA5858", "#81F79F"),
+  color = c("#0404B4", "#E2D303", "#B40404", "#088A08"))
+
+totals_state %>% group_by(state) %>%
+  summarize(total_cases = sum(total)) %>% arrange(-total_cases) %>% head(15) %>%
+  ggplot(aes(x = reorder(state,total_cases), y = total_cases)) +
+  geom_bar(stat = "identity", fill  = colors$fill[colors$type == "confirmed"], width = 0.8) +
+  scale_y_continuous(breaks = seq(0, 14000, by = 2000)) +
+  coord_flip() +
+  theme_light(base_size = 10) +
+  labs(x = "", y = "", title = "Top 15: Most Confirmed Cases") +
+  theme(axis.title = element_text(size = 14, colour = "black"),
+        axis.text.y = element_text(size = 11, face = "bold"),
+        plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+Top 15 states by death.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's get the list of the 15 states with most deaths
+totals_state %>% filter(outcome == "deceased") %>% 
+  arrange(-total) %>% head(15)
+
+totals_state %>% filter(outcome == "deceased") %>% 
+  arrange(-total) %>% head(15) %>%
+  ggplot(aes(x = reorder(state,total), y = total )) +
+  geom_bar(stat = "identity", fill  = colors$fill[colors$type == "deceased"], width = 0.8) +
+  scale_y_continuous(breaks = seq(0, 400, by = 50)) +
+  coord_flip() +
+  theme_light(base_size = 10) +
+  labs(x = "", y = "", title = "Top 15: Most Deceased") +
+  theme(axis.title = element_text(size = 14, colour = "black"),
+        axis.text.y = element_text(size = 11, face = "bold"),
+        plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+Top 15 states with most recovered patients.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's get the list of the 15 states with most recovered cases
+totals_state %>% filter(outcome == "recovered") %>% 
+  arrange(-total) %>% head(15)
+
+totals_state %>% filter(outcome == "recovered") %>% 
+  arrange(-total) %>% head(15) %>%
+  ggplot(aes(x = reorder(state,total), y = total )) +
+  geom_bar(stat = "identity", fill  = colors$fill[colors$type == "recovered"], width = 0.8) +
+  scale_y_continuous(breaks = seq(0, 5000, by = 500)) +
+  coord_flip() +
+  theme_light(base_size = 10) +
+  labs(x = "", y = "", title = "Top 15: Most Recovered") +
+  theme(axis.title = element_text(size = 14, colour = "black"),
+        axis.text.y = element_text(size = 11, face = "bold"),
+        plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+Top 15 states with most active cases.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's get the list of the 15 states with most active cases
+totals_state %>% filter(outcome != "deceased" & outcome != "recovered" & outcome != "unknown") %>% 
+  group_by(state) %>% summarize(total_cases = sum(total)) %>% 
+  arrange(-total_cases) %>% head(15)
+
+totals_state %>% filter(outcome != "deceased" & outcome != "recovered" & outcome != "unknown") %>% 
+  group_by(state) %>% summarize(total_cases = sum(total)) %>% 
+  arrange(-total_cases) %>% head(15) %>%
+  ggplot(aes(x = reorder(state,total_cases), y = total_cases )) +
+  geom_bar(stat = "identity", fill  = colors$fill[colors$type == "active"], width = 0.8) +
+  scale_y_continuous(breaks = seq(0, 7000, by = 1000)) +
+  coord_flip() +
+  theme_light(base_size = 10) +
+  labs(x = "", y = "", title = "Top 15: Most Active") +
+  theme(axis.title = element_text(size = 14, colour = "black"),
+        axis.text.y = element_text(size = 11, face = "bold"),
+        plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+From the above set of plots we can see that Bogota is the most impacted city in the country, with a huge difference against the others, this makes sense, if we think about this is the biggest city and with the highest population density.
+
+Now let's look at how the disease has evolved in Colombia with 2 plots, the first one is a time plot showing the daily new cases by type.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Object with total cases by date
+totals <- coronavirus %>% filter(!is.na(symptoms_date)) %>%
+  group_by(outcome, symptoms_date) %>%
+  summarise(total_cases = n()) %>%
+  ungroup() %>%
+  arrange(symptoms_date) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, 
+              values_fill = list(total_cases = 0)) %>%
+  mutate(confirmed = rowSums(.[,-1]), active = icu+hospitalized+outpatientCare)
+
+# Daily COVID-19 cases
+ggplot(data = totals, aes(x = symptoms_date)) +
+  geom_bar(aes(y = confirmed, color = "confirmed_col", fill = "confirmed_col"), 
+           position = "identity", stat = "identity") +
+  geom_bar(aes(y = active, color = "active_col", fill = "active_col"), 
+           position = "identity", stat = "identity") +
+  geom_bar(aes(y = recovered, color = "recovered_col", fill = "recovered_col"), 
+           position = "identity", stat = "identity") +
+  geom_bar(aes(y = deceased, color = "deceased_col", fill = "deceased_col"), 
+           position = "identity", stat = "identity") +
+  theme_light(base_size = 10) +
+  scale_y_continuous(breaks = seq(0, 1200, by = 200)) +
+  scale_color_manual(name = "Type",
+            values = c( "confirmed_col"=paste(colors$color[colors$type == "confirmed"], sep=""), 
+                        "active_col"=paste(colors$color[colors$type == "active"], sep=""), 
+                        "deceased_col"=paste(colors$color[colors$type == "deceased"], sep=""), 
+                        "recovered_col"=paste(colors$color[colors$type == "recovered"], sep="")),
+            labels = c("Active", "Confirmed", "Deceased", "Recovered")) +
+  scale_fill_manual(name = "Type",
+            values = c( "confirmed_col"=paste(colors$fill[colors$type == "confirmed"], sep=""), 
+                        "active_col"=paste(colors$fill[colors$type == "active"], sep=""), 
+                        "deceased_col"=paste(colors$fill[colors$type == "deceased"], sep=""), 
+                        "recovered_col"=paste(colors$fill[colors$type == "recovered"], sep="")),
+            labels = c("Active", "Confirmed", "Deceased", "Recovered")) +
+  theme( #plot.margin = margin(0, 0, 0, 0, "pt"),
+         legend.position = c(0.1, 0.8),
+         plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47")
+  ) +
+  xlab("") +
+  ylab("Number of Cases") +
+  ggtitle("Daily COVID-19 Cases")
+```
+
+We can clearly see how at the begining the confirmed cases and recovered cases number almost match, but from mid May is quite different, since we can see how active and confirmed cases are growing almost at the same pace, this is because of all the current cases that do not have an outcome yet, those are the cases we are going to attempt to predict.
+
+The second plot is also a time plot that shows the cumulative number of cases per type.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Updating totals object with cumulative total cases by date
+totals <- totals %>% 
+  mutate(active_total = cumsum(active),
+         recovered_total = cumsum(recovered),
+         deceased_total = cumsum(deceased))
+
+# Distribution of COVID-19 cases worldwide
+ggplot(data = totals, aes(x = symptoms_date)) +
+  geom_density(aes(y = recovered_total, color = "recovered_col", fill = "recovered_col"), 
+               position = "identity", stat = "identity") +
+  geom_density(aes(y = active_total, color = "active_col", fill = "active_col"), 
+               position = "identity", stat = "identity", alpha=.7) +
+  geom_density(aes(y = deceased_total, color = "deceased_col", fill = "deceased_col"), 
+               position = "identity", stat = "identity") +
+  theme_light(base_size = 10) +
+  scale_y_continuous(breaks = seq(0, 20000, by = 2000)) +
+  scale_color_manual(name = "Type",
+                values = c( "active_col"=paste(colors$color[colors$type == "active"], sep=""), 
+                            "deceased_col"=paste(colors$color[colors$type == "deceased"], sep=""), 
+                            "recovered_col"=paste(colors$color[colors$type == "recovered"], sep="")),
+                labels = c("Active", "Death", "Recovered")) +
+  scale_fill_manual(name = "Type",
+                values = c( "active_col"=paste(colors$fill[colors$type == "active"], sep=""), 
+                            "deceased_col"=paste(colors$fill[colors$type == "deceased"], sep=""), 
+                            "recovered_col"=paste(colors$fill[colors$type == "recovered"], sep="")),
+                labels = c("Active", "Death", "Recovered")) +
+  theme(
+    legend.position = c(0.1, 0.8),
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47")
+  ) +
+  xlab("") +
+  ylab("Number of Cases") +
+  ggtitle("Distribution of COVID-19 Cases")
+```
+
+In both plots we can see how the cases peak starts around mid April, also we can notice that the curve seems to be going down, which is promising.
+
+## Features
+
+Now we are going to analyze some of the features we have in the *coronavirus* dataset, we won't include all the features, only those we consider can be more important to predict.
+
+### Age
+
+This is an important feature, knowing that COVID-19 has hit older adults harder than other age groups because they are more likely to already have underlying conditions such as cardiovascular disease, diabetes, or respiratory illness — comorbidities that we now know raise the risk of severe COVID-19 and COVID-19-related death. In addition, a likely weaker immune system makes it harder for older adults to fight off infection.
+
+Let's take a look at how is the COVID-19 cases distribution by age.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Set with total cases by age and type of outcome
+totals_age <- coronavirus %>% 
+  group_by(outcome, age) %>%
+  summarise(total_cases = n()) %>%
+  ungroup() %>%
+  arrange(age) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, 
+              values_fill = list(total_cases = 0)) %>%
+  mutate(confirmed = rowSums(.[,-1]), death_rate = (deceased*100)/confirmed)
+
+# List of top 15 ages with more confirmed cases
+totals_age %>% arrange(-confirmed) %>% head(15)
+
+# Age distribution
+totals_age %>% arrange(-confirmed) %>% 
+  ggplot(aes(x = age, y = confirmed, fill=age)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  theme_light(base_size = 10) +
+  labs(x = "Age", y = "Cases", title = "Age Distribution") +
+  theme(
+    axis.title = element_text(size = 14, colour = "black"),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+We can see that the age range with more cases are between 25 and 40 years, but are these also the more impacted by deaths? Let's check.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Top 15 ages by death rate
+totals_age %>% arrange(-death_rate) %>% head(15)
+
+# Death rate by age
+totals_age %>% arrange(-death_rate) %>% 
+  ggplot(aes(x = age, y = death_rate, fill=age)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  theme_light(base_size = 10) +
+  labs(x = "Age", y = "Death Rate", title = "Death Rate by Age") +
+  theme(
+    axis.title = element_text(size = 14, colour = "black"),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+We can clearly see how the death rate is greater for older people, so answering the above question: no, the 25-40 age range is not also the more impacted by deaths.
+
+After analysing the age data we can infer that this is an important feature to predict COVID-19 outcome.
+
+### Gender
+
+We have heard on the news that the novel coronavirus, COVID-19, tends to affect men more severely than it does women. Though nobody can yet explain the oddity, potential reasons run the gamut from biology to bad habits.
+
+The World Health Organization (WHO) has [reported](http://www.euro.who.int/en/health-topics/health-emergencies/coronavirus-covid-19/weekly-surveillance-report) that arund 60 percent of deaths related to COVID-19 in Europe have been among men.
+
+Some of the underlying reasons why COVID-19 may be more deadly for men than women may include the fact that heart disease is more common in elderly men than in elderly women, [Dr. Stephen Berger](https://www.gideononline.com/about/team/). Genetics may also play a big role, Berger said, Women, because of their extra X chromosome, have a stronger immune system and response to infections than men. Berger also said that it’s possible that men are more at risk because they tend to expose themselves more to larger crowds and social exchanges, including things like handshaking and sporting events
+
+Let's now explore the Colombian situation and see whether men have been more impacted or not.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Object with total cases by sex and type of outcome
+totals_sex <- coronavirus %>% 
+  group_by(outcome, sex) %>%
+  summarise(total_cases = n()) %>%
+  ungroup() %>%
+  arrange(sex) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, 
+              values_fill = list(total_cases = 0)) %>%
+  mutate(confirmed = rowSums(.[,-1]), death_rate = (deceased*100)/confirmed)
+
+# Confirmed cases by gender
+totals_sex %>% arrange(-confirmed)
+
+# Gender distribution
+totals_sex %>% arrange(-confirmed) %>% 
+  ggplot(aes(x = sex, y = confirmed, fill=sex)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  theme_light(base_size = 10) +
+  labs(x = "Gender", y = "Cases", title = "Gender Distribution") +
+  theme(
+    axis.title = element_text(size = 14, colour = "black"),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+From the data and the plot we can see that men have about of `r round((totals_sex$confirmed[totals_sex$sex=="M"] * 100) / sum(totals_sex$confirmed), digits=2)`% of the confirmed cases, but let's check the death rate and see how are men impacted.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Death rate by sex
+totals_sex %>% arrange(-death_rate) %>% 
+  ggplot(aes(x = sex, y = death_rate, fill=sex)) +
+  geom_bar(stat = "identity", width = 0.8) +
+  theme_light(base_size = 10) +
+  labs(x = "Gender", y = "Death Rate", title = "Death Rate by Gender") +
+  theme(
+    axis.title = element_text(size = 14, colour = "black"),
+    axis.text.y = element_text(size = 11, face = "bold"),
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
+```
+
+This data confirms the world's trend of men being more affected by COVID-19, with a `r round(totals_sex$death_rate[totals_sex$sex=="M"], digits=2)`% of death rate for men and `r round(totals_sex$death_rate[totals_sex$sex=="F"], digits=2)`% for women.
+
+\newpage
+
+# Data Pre-Processing
+
+We will predict if a person infected by COVID-19 in Colombia will die or live, using the features from the *coronavirus* dataset like age, sex, contagion type and more, and we will include others features like number of days until the pacient gets an outcome and number of days from the symptoms date until confirmation date from lab analysis (diagnosis date), these two we will calculate using the data in the *coronavirus* dataset. 
+
+## Features Creation
+
+### Outcome Time
+
+We will include the time, in days, it takes a patient to get an outcome from the COVID-19 disease, whether died or recovered. 
+
+Knowing that recovering from COVID-19 may take up to 14 days, we think this is an important feature, since the number of days may indicate if the patient had any complication that took more than expected to get recovered, taking him under ICU or hospitalized for a period of time.
+
+Let's add the feature and explore the data.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Include outcome_time feature with number of days
+# until patient gets an outcome
+coronavirus <- coronavirus %>% 
+  mutate(outcome_time = ifelse(!is.na(date_of_death), difftime(date_of_death, 
+                                                               symptoms_date, units="days"),
+                               ifelse(!is.na(recovery_date), difftime(recovery_date, 
+                                                                      symptoms_date, units="days"),NA)))
+
+# Let's get the number of deceased and recovered with outcome_time 
+# greater and smaller than 14
+cat("Number of deceased with outcome_time greater than 14: ", 
+    coronavirus %>% filter(outcome_time > 14 & outcome == "deceased") %>% nrow())
+cat("Number of recovered with outcome_time greater than 14: ", 
+    coronavirus %>% filter(outcome_time > 14 & outcome == "recovered") %>% nrow())
+cat("Number of deceased with outcome_time less than 14: ", 
+    coronavirus %>% filter(outcome_time < 14 & outcome == "deceased") %>% nrow())
+cat("Number of recovered with outcome_time less than 14: ", 
+    coronavirus %>% filter(outcome_time < 14 & outcome == "recovered") %>% nrow())
+```
+
+From the data above we can see that there is more deaths when the outcome time is less than 14 days, also we can see that a lot more people get recovered when outcome time is greater than 14 days. Let's visualize this in the next plot.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's visualize the outcome_time feature with this plot
+coronavirus %>% filter((outcome=="recovered" | outcome=="deceased") & !is.na(outcome_time)) %>% 
+  group_by(outcome, outcome_time) %>%
+  summarise(total_cases = n()) %>%
+  ungroup() %>%
+  arrange(outcome_time) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, values_fill = list(total_cases = 0)) %>%
+  ggplot(aes(x = outcome_time)) +
+  geom_line(aes(y = recovered, color = "recovered_col"), 
+               position = "identity", stat = "identity") +
+  geom_line(aes(y = deceased, color = "deceased_col"), 
+               position = "identity", stat = "identity") +
+  theme_light(base_size = 10) +
+  scale_color_manual(name = "Type",
+                     values = c( "deceased_col"="#FA5858", 
+                                 "recovered_col"="#81F79F"),
+                     labels = c("Death", "Recovered")) +
+  theme(
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47")
+  ) +
+  xlab("Outcome Time") +
+  ylab("Number of Cases") +
+  ggtitle("Outcome Time")
+```
+
+With this plot we have confirmed that most of the deaths happen in the first 10 days of the disease, while most of the recovered are between 12 and 30 days after the symptoms date.
+
+### Diagnosis Time
+
+Now let's create one more feature which contains the time, in days, it takes a patient to get lab test results taking as start date, the symptoms date.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Include diagnosis_time feature with number of days
+# until patient gets the lab test results
+coronavirus <- coronavirus %>% 
+  mutate(diagnosis_time = ifelse(!is.na(diagnosis_date), 
+                                 difftime(diagnosis_date, symptoms_date, units="days"),NA))
+```
+
+Let's analyze this feature by getting the top 6 cases ordered by recovered or deceased.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Subset with recovered and deceased cases
+# grouped by outcome and diagnosis_time
+totals_diagnosis_time <- coronavirus %>% 
+  filter((outcome=="recovered" | outcome=="deceased") & !is.na(diagnosis_time)) %>% 
+  group_by(outcome, diagnosis_time) %>%
+  summarise(total_cases = n()) %>%
+  ungroup() %>%
+  arrange(diagnosis_time) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, values_fill = list(total_cases = 0))
+
+# Top 6 diagnosis_time by recovered
+top_recovered <- totals_diagnosis_time %>% arrange(-recovered) %>% head()
+top_recovered
+
+# Top 6 diagnosis_time by deceased
+top_deceased <- totals_diagnosis_time %>% arrange(-deceased) %>% head()
+top_deceased
+```
+
+From the above data we can see that most recovered cases are between `r min(top_recovered$diagnosis_time)` and `r max(top_recovered$diagnosis_time)` days, and for deceased cases are between `r min(top_deceased$diagnosis_time)` and `r max(top_deceased$diagnosis_time)` days, there is a few days difference between recovered and death cases, this can help us in our predictions.
+
+Let's plot this feature.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Let's visualize the diagnosis_time feature with this plot
+ggplot(data = totals_diagnosis_time, aes(x = diagnosis_time)) +
+  geom_line(aes(y = recovered, color = "recovered_col"), 
+            position = "identity", stat = "identity") +
+  geom_line(aes(y = deceased, color = "deceased_col"), 
+            position = "identity", stat = "identity") +
+  theme_light(base_size = 10) +
+  scale_color_manual(name = "Type",
+                     values = c( "deceased_col"="#FA5858", 
+                                 "recovered_col"="#81F79F"),
+                     labels = c("Death", "Recovered")) +
+  theme(
+    plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47")
+  ) +
+  xlab("Diagnosis Time") +
+  ylab("Number of Cases") +
+  ggtitle("Diagnosis Time")
+
+# Cleaning objects we won't use
+rm(totals_diagnosis_time, top_recovered, top_deceased)
+```
+
+## Data Preparation
+
+### Data Cleaning
+
+Here we are going to prepare our dataset to start modeling, first we are going to remove the columns we won't use to predict because they do not represent important data, like, *municipality_code*, *record_date*, *web_date*, etc.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Select only the columns we are interested in,
+# the columns we will use for predicting
+coronavirus <- coronavirus %>% 
+  select(id, state, age, sex, contagion_type, symptoms_date, diagnosis_date, 
+         diagnosis_time, outcome_time, outcome)
+```
+
+Next, we will change the *outcome* level values to make NA those statuses where a patient is still an active case, with no definitive outcome yet. For example if outcome value is "icu", this means the patient is still under care because of COVID-19. So, basically we will consider "icu", "hospitalized" and "outpatientCare" as NA and only keep as possible outcomes "recovered" or "deceased".
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Mutate outcome to change to NA those cases we don't know the outcome yet
+coronavirus[,'outcome'] <- ifelse(coronavirus[,'outcome'] == "recovered", "recovered", 
+                                  ifelse(coronavirus[,'outcome'] == "deceased", "deceased", 
+                                         ifelse(coronavirus[,'outcome'] == "icu", NA, 
+                                                ifelse(coronavirus[,'outcome'] == "hospitalized", NA, 
+                                                       ifelse(coronavirus[,'outcome'] == "outpatientCare", NA, NA)))))
+
+# Factorizing outcome to the 2 only possible values
+coronavirus[,'outcome'] <- factor(coronavirus$outcome, levels = c("recovered","deceased"))
+
+# Let's check the dataset dimension and structure
+# before any cleanup
+str(coronavirus)
+dim(coronavirus)
+```
+
+Now, we will remove all the rows containing NAs in all the columns but *outcome_time* and *outcome*, as we will try to predict the outcome for all this NAs.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Number of rows before cleaning
+dim <- dim(coronavirus)[1]
+
+# Remove NAs from all columns but outcome_time and outcome,
+# since we will keep them to predict
+coronavirus <- coronavirus[complete.cases(coronavirus[ , c(1:8)]),]
+
+dim(coronavirus)
+
+cat("Removed rows after cleaning NAs: ", 
+    dim - dim(coronavirus)[1])
+
+# Number of rows after cleaning NAs
+dim <- dim(coronavirus)[1]
+
+# Filter out rows with and outcome and no outcome_time nor diagnosis_time
+coronavirus <- coronavirus %>% 
+  filter((!is.na(outcome) & !is.na(outcome_time) & !is.na(diagnosis_time)) |
+           is.na(outcome))
+
+dim(coronavirus)
+
+cat("Removed rows after filtering outcome_time NAs: ", 
+    dim - dim(coronavirus)[1])
+
+# Cleaning objects we won't use
+rm(dim)
+```
+
+### Train and Test Sets
+
+First, we are going to split the *coronavirus* dataset in two, *training* and *prediction* sets, where the *prediction* set will contain all the active cases (outcome with NA value) and we will use it for our final prediction, the *training* set will be all cases with a known outcome, and will be used for modeling and choosing the best algorithm which we will apply to the *prediction* set in the final prediction.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# training & prediction sets
+# Predict outcome of Active cases is.na(outcome) prediction set
+training <- coronavirus %>% filter(!is.na(outcome))
+prediction <- coronavirus %>% filter(is.na(outcome))
+
+dim(training)
+dim(prediction)
+```
+
+Now, we will randomly split the *training* set in two, *train_set* and *test_set* sets, which we will use for training the models and evaluate them. The train set will be 80% of *training* data and the test set will be the remaining 20%.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# train and test sets
+# train 80% of training set
+# test 20% of training set
+set.seed(19, sample.kind="Rounding")
+index <- createDataPartition(training$outcome, times = 1, p = 0.2, list=FALSE)
+train_set <- training[-index,]
+test_set  <- training[index,]
+
+# Cleaning objects we won't use
+rm(index)
+```
+
+Finally we are going to prepare our train and test sets, by removing columns we won't use for modeling, but are useful to keed for reference in the final result, these colums are: *id*, *symptoms_date* and *diagnose_date*, we replaced the dates with *outcome_time* and *diagnosis_time*.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Remove symptoms_date and diagnosis_date
+# we won't use the dates for prediction,
+# we use instead outcome_time and diagnosis_time
+train_set <- train_set %>% select(-id,-symptoms_date,-diagnosis_date)
+
+test_set <- test_set %>% select(-id,-symptoms_date,-diagnosis_date)
+
+dim(train_set)
+dim(test_set)
+```
+
+\newpage
+
+# Modeling
+
+For modeling we will use the *caret* package, caret is short for Classification And REgression Training, and is a comprehensive framework for building machine learning models in R, *caret* helps to find the optimal model in the shortest possible time.
+
+It integrates all activities related to model development in a streamlined workflow. For nearly every major machine learning algorithm available in R.
+
+With R having so many implementations of machine learning algorithms, it can be challenging to keep track of which algorithm resides in which package. Thanks to *caret* no matter which package the algorithm resides, caret will remember that for you and it will just prompt you to run install.package for that particular algorithm's package.
+
+For training we will use the caret *train* function, which lets us train different algorithms using similar syntax.
+
+For evaluating the algorithms we will use the Confusion Matrix, which tabulates each combination of prediction and actual value, it is often used to describe the performance of a classification model (or “classifier”) on a set of test data for which the true values are known. It allows the visualization of the performance of an algorithm. From the confustion matrix we will compare the following values to select the best model:
+
+* Sensitivity: also known as the true positive rate or recall, is the proportion of actual positive outcomes correctly identified as such.
+* Specificity: also known as the true negative rate, is the proportion of actual negative outcomes that are correctly identified as such.
+* Overall Accuracy: the proportion of cases that were correctly predicted in the test set.
+
+## Logistic Regression
+
+Linear regression is a model that assumes a linear relationship between the input variables ($x$) and the single output variable ($y$). More specifically, that $y$ can be calculated from a linear combination of the input variables ($x$). Linear Regression serves as a baseline approach: if you can’t beat it with a more complex approach, you probably want to stick to linear regression.
+
+Logistic regression is useful when you are predicting a binary outcome from a set of continuous predictor variables. It differs from linear regression model because it only accepts dichotomous (binary) input as a dependent variable (i.e., a vector of 0 and 1).
+
+In R, we can fit the logistic regression model with the function *glm*: generalized linear models. This function is more general than logistic regression so we need to specify the model we want through the family parameter.
+
+Now, let's apply the logistic regression model to our data.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Change outcome to binary, 0 and 1
+train_set_glm <- train_set %>% mutate(outcome = as.numeric(outcome == "recovered"))
+
+# Fit logistic regression model
+train_glm <- glm(outcome ~ ., data = train_set_glm, family = "binomial")
+
+# Variable of importance
+imp <- as.data.frame(varImp(train_glm))
+imp <- data.frame(overall = imp$Overall,
+                  names   = rownames(imp))
+imp %>% arrange(-overall) %>% head()
+
+p_hat <- predict(train_glm, test_set) 
+y_hat <- factor(ifelse(p_hat > 0.5, "recovered", "deceased"))%>% factor(levels = c("recovered","deceased"))
+
+# Confusion Matrix
+cm <- confusionMatrix(y_hat, test_set$outcome)
+
+# Results
+cm_results <- bind_rows(tibble(Model = "Logistic Regression", 
+                                  Accuracy = cm$overall["Accuracy"], 
+                                  Sensitivity = cm$byClass["Sensitivity"],
+                                  Specificity = cm$byClass["Specificity"]))
+# Print the results
+cm_results
+
+# Cleaning objects we won't use
+rm(train_set_glm, p_hat)
+```
+
+We got an accuracy of `r round(cm$overall["Accuracy"], digits=3)` which is good, let's compare against other models and see if we can do better. The most important variables in the model were *outcome_time*, *age* and *diagnosis_time*.
+
+## K-nearest neighbor
+
+K-nearest neighbor (KNN) is a machine learning algorithm that classifies a new data point into the target class, depending on the features of its neighboring data points, so basically it is mainly based on feature similarity. KNN checks how similar a data point is to its neighbor and classifies the data point into the class it is most similar to.
+
+The algorithm calculates the euclidean distance of all predictors, then for any point $(x1,..,xp)$ in the multidimensional space that we want to predict, the algorithm determines the distance to $k$ points. The $k$ nearest points is refereed as neighborhood.
+
+For $k=1$ the algorithm finds the distance to a single neighbor, $k$ is a tuning parameter that can be calculated running the algorithm for several values of $k$ and picking the result with highest accuracy.
+
+Let's fit our model and compare the results.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+set.seed(19, sample.kind="Rounding")
+
+# Fit knn model
+control <- trainControl(method = "cv", number = 10, p = .9)
+train_knn <- train(outcome ~ ., 
+                   data = train_set,
+                   method = "knn", 
+                   tuneGrid = data.frame(k = seq(3, 21, 2)),
+                   trControl = control)
+
+# Final value of k used in the model
+train_knn$bestTune
+
+ggplot(train_knn)
+
+y_hat <- predict(train_knn, test_set, type="raw")
+
+# Confusion Matrix
+cm <- confusionMatrix(y_hat, test_set$outcome)
+
+# Results
+cm_results <- bind_rows(cm_results,
+                        tibble(Model = "k-nearest neighbors", 
+                               Accuracy = cm$overall["Accuracy"], 
+                               Sensitivity = cm$byClass["Sensitivity"],
+                               Specificity = cm$byClass["Specificity"]))
+# Print the results
+cm_results
+```
+
+With KNN we have obtained similar accuracy than with Logistic Regression model, `r round(cm$overall["Accuracy"], digits=3)`, the three most important variables are the same but this time having *age* as the most important followed by *outcome_time* and *diagnosis_time.*
+
+## Classification and Regression Trees
+
+A tree is basically a flow chart of yes or no questions. A Regression or Decision Tree is a supervised learning predictive model that uses a set of binary rules to calculate a target value. It is used for either classification (categorical target variable) or regression (continuous target variable). Hence, it is also known as CART (Classification & Regression Trees).
+
+Regression and decision trees operate by predicting an outcome variable $Y$ by partitioning predictors.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+set.seed(19, sample.kind="Rounding")
+
+# Fit rpart model
+train_rpart <- train(outcome ~ ., 
+                     method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)),
+                     data = train_set)
+
+# Best tuning parameter and plot
+train_rpart$bestTune
+
+ggplot(train_rpart)
+
+#To see the resulting tree we access the finalModel and plot it:
+fancyRpartPlot(train_rpart$finalModel)
+
+# Variable of importance
+imp <- as.data.frame(varImp(train_rpart)$importance)
+imp <- data.frame(overall = imp$Overall,
+                  names   = rownames(imp))
+imp %>% arrange(-overall) %>% head()
+
+y_hat = predict(train_rpart, test_set)
+
+# Confusion Matrix
+cm <- confusionMatrix(y_hat, test_set$outcome)
+
+# Results
+cm_results <- bind_rows(cm_results,
+                        tibble(Model = "Regression Trees", 
+                               Accuracy = cm$overall["Accuracy"], 
+                               Sensitivity = cm$byClass["Sensitivity"],
+                               Specificity = cm$byClass["Specificity"]))
+# Print the results
+cm_results
+```
+
+Again we got a similar accuracy, `r round(cm$overall["Accuracy"], digits=3)`, having the same three important variables in the following order: *outcome_time*, *age* and *diagnosis_time*. Next let's evaluate a Random Forest model and see how much can we improve.
+
+## Random Forest
+
+Random forests are a very popular machine learning approach that addresses the shortcomings of decision trees. The goal is to improve prediction performance and reduce instability by averaging multiple decision trees (a forest of trees constructed with randomness).
+The general idea of random forests is to generate many predictors, each using regression or classification trees, and then forming a final prediction based on the average prediction of all these trees. To assure that the individual trees are not the same, we use the bootstrap to induce randomness. 
+A disadvantage of random forests is that we lose interpretability.
+An approach that helps with interpretability is to examine variable importance. To define variable importance we count how often a predictor is used in the individual trees. The caret package includes the function varImp that extracts variable importance from any model in which the calculation is implemented.
+
+The name random forest derives from the random process of splitting the data and creating many trees, or a forest.
+
+Let's check the model.
+
+```{r echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Fit Random Forest model
+train_rf <- randomForest(outcome ~ ., data=train_set)
+
+plot(train_rf)
+
+# Variable of importance
+imp <- as.data.frame(varImp(train_rf))
+imp <- data.frame(overall = imp$Overall,
+                  names   = rownames(imp))
+imp[order(imp$overall,decreasing = T),]
+varImpPlot(train_rf, main = "Random Forest Variable importance")
+
+y_hat <- predict(train_rf, test_set)
+
+# Confusion Matrix
+cm <- confusionMatrix(y_hat, test_set$outcome)
+
+# Results
+cm_results <- bind_rows(cm_results,
+                        tibble(Model = "Random Forest", 
+                               Accuracy = cm$overall["Accuracy"], 
+                               Sensitivity = cm$byClass["Sensitivity"],
+                               Specificity = cm$byClass["Specificity"]))
+# Print the results
+cm_results
+```
+
+In the first plot, we can see that the accuracy improves as we add more trees until about 50 trees where accuracy stabilizes. In general we have improved our accuracy from previous models, `r round(cm$overall["Accuracy"], digits=3)` as well sensitivity and specificity values. Checking the variables of importance we have the same three, in the same order *outcome_time*, *age* and *diagnosis_time*.
+
+
+
+
+
+
+Also, we will change the *outcome_time* value in the test set, with the number of days from the symptoms date to the current date, so we can predict considering the outcome time at the moment we run the prediction.
+
+
+
+
+Let's check if this worked.
+
+```{r country_names_verification, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+```
+
+Apart from the countries listed above where we couldn't find equivalents in *world_population* dataset, the country names are standardized.
+
+Now we can join the datasets.
+
+```{r join_datasets, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+```
+
+From the summary we can see that we have some NA values for density, let's check what countries have no data.
+
+```{r density_na, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+```
+
+These are the same entries that didn't match between *covid19* and *world_population* data, so they do not have demographic information, some of them because they are cruises instead of countries. Let's remove this data from our *covid19* dataset.
+
+```{r density_clean, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Cleaning the data
+# Removing all the non matches countries since they won't 
+# have values for the features (density and age)
+#cat("The total number of NA values: ", sum(is.na(covid19$density)))
+#dim <- dim(covid19)[1]
+#covid19 <- covid19[complete.cases(covid19[ , 6:7]),]
+#cat("The removed rows match NA number of rows: ", dim - dim(covid19)[1])
+```
+
+From the summary we could also see that the median age is defined as character instead of number, let's check it's values.
+
+```{r age_na, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+```
+
+We can see we have an "N.A." value in the median age colum, let's delete those records as they won't be useful to predict, also we will change the age column to numeric.
+
+```{r age_clean, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+
+```
+
+
+
+
+
+
+Canada - Only Recovered are empties
+United Kingdom - independents
+China - Not Empties
+Netherlands - independents (Aruba, Curacao, Bonaire, etc)
+Australia - Not Empties
+Denmark - independents (islas feroe, greenland)
+France - independents
+
+
+
+
+\newpage
+
+# References
+
+* https://www.datos.gov.co/Salud-y-Protecci-n-Social/Casos-positivos-de-COVID-19-en-Colombia/gt2j-8ykr
+* https://www.ins.gov.co/Noticias/Paginas/Coronavirus.aspx
+* https://www.who.int/health-topics/coronavirus
+* https://covid19.who.int/
+* https://covid19.ncdhhs.gov/about-covid-19
+* https://www.sciencedirect.com/science/article/pii/S1684118220300980
+* https://unstats.un.org/unsd/ccsa/documents/covid19-report-ccsa.pdf
+* https://www.medicalnewstoday.com/articles/the-impact-of-the-covid-19-pandemic-on-older-adults#Old-age-and-preexisting-health-conditions
+* http://www.euro.who.int/en/health-topics/health-emergencies/coronavirus-covid-19/weekly-surveillance-report
+* https://www.healthline.com/health-news/men-more-susceptible-to-serious-covid-19-illnesses
+* https://www.gideononline.com/about/team/
+* https://rafalab.github.io/dsbook/caret.html
+* https://howtoteachdatascience.github.io/JSM2018/lectures/09-machine-learning-2.html
+* https://www.machinelearningplus.com/machine-learning/caret-package/
+
+
+* https://www.r-graph-gallery.com/330-bubble-map-with-ggplot2.html
+* https://dash.datascienceplus.com/covid19/
