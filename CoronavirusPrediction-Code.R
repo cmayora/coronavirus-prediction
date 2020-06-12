@@ -33,10 +33,6 @@ if(!require(randomForest)) install.packages("randomForest", repos = "http://cran
 
 coronavirus <- read.csv('Casos_positivos_de_COVID-19_en_Colombia.csv', stringsAsFactors = FALSE, na.strings='')
 
-# New column was added on 06/11
-# removing this column to not break the entire code
-coronavirus <- coronavirus[1:(length(coronavirus)-1)]
-
 ###################################
 ##### Data Exploration #####
 
@@ -49,7 +45,8 @@ str(coronavirus)
 # Change column names
 names(coronavirus) <- c('id','record_date','municipality_code','city','state','outcome',
                         'age','sex', 'contagion_type','severity','origin_country', "symptoms_date",
-                        'date_of_death','diagnosis_date','recovery_date','web_date','recovery_type')
+                        'date_of_death','diagnosis_date','recovery_date','web_date','recovery_type',
+                        'origin_country_code')
 
 # coronavirus structure
 str(coronavirus)
@@ -89,6 +86,7 @@ coronavirus[,'recovery_type'] <- ifelse(coronavirus[,'recovery_type'] == "PCR", 
                                         ifelse(coronavirus[,'recovery_type'] == "Tiempo" | 
                                                  coronavirus[,'recovery_type'] == "TIEMPO", "time", NA))
 coronavirus$recovery_type  <- as.factor(coronavirus$recovery_type)
+coronavirus$origin_country_code <- as.integer(coronavirus$origin_country_code)
 
 # coronavirus structure after tyding
 str(coronavirus)
@@ -100,7 +98,7 @@ summary(coronavirus)
 ###### COVID-19 Situation In Colombia ######
 
 
-# Let's get the current status on cases confirmed cases
+# Let's get the number of cases per status
 cat("The total number of confirmed cases is: ", nrow(coronavirus))
 cat("The total number of deaths is: ", sum(coronavirus$outcome == "deceased"))
 cat("The total number of recovered is: ", sum(coronavirus$outcome == "recovered"))
@@ -130,7 +128,7 @@ totals_state %>% group_by(state) %>%
   scale_y_continuous(breaks = seq(0, 14000, by = 2000)) +
   coord_flip() +
   theme_light(base_size = 10) +
-  labs(x = "", y = "", title = "Top 15: Most Confirmed Cases") +
+  labs(x = "", y = "", title = "Top 15 States: Most Confirmed Cases") +
   theme(axis.title = element_text(size = 14, colour = "black"),
         axis.text.y = element_text(size = 11, face = "bold"),
         plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
@@ -146,7 +144,7 @@ totals_state %>% filter(outcome == "deceased") %>%
   scale_y_continuous(breaks = seq(0, 400, by = 50)) +
   coord_flip() +
   theme_light(base_size = 10) +
-  labs(x = "", y = "", title = "Top 15: Most Deceased") +
+  labs(x = "", y = "", title = "Top 15 States: Most Deceased") +
   theme(axis.title = element_text(size = 14, colour = "black"),
         axis.text.y = element_text(size = 11, face = "bold"),
         plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
@@ -162,7 +160,7 @@ totals_state %>% filter(outcome == "recovered") %>%
   scale_y_continuous(breaks = seq(0, 5000, by = 500)) +
   coord_flip() +
   theme_light(base_size = 10) +
-  labs(x = "", y = "", title = "Top 15: Most Recovered") +
+  labs(x = "", y = "", title = "Top 15 States: Most Recovered") +
   theme(axis.title = element_text(size = 14, colour = "black"),
         axis.text.y = element_text(size = 11, face = "bold"),
         plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
@@ -180,7 +178,7 @@ totals_state %>% filter(outcome != "deceased" & outcome != "recovered" & outcome
   scale_y_continuous(breaks = seq(0, 7000, by = 1000)) +
   coord_flip() +
   theme_light(base_size = 10) +
-  labs(x = "", y = "", title = "Top 15: Most Active") +
+  labs(x = "", y = "", title = "Top 15 States: Most Active Cases") +
   theme(axis.title = element_text(size = 14, colour = "black"),
         axis.text.y = element_text(size = 11, face = "bold"),
         plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47"))
@@ -218,7 +216,7 @@ ggplot(data = totals, aes(x = symptoms_date)) +
                                 "deceased_col"=paste(colors$fill[colors$type == "deceased"], sep=""), 
                                 "recovered_col"=paste(colors$fill[colors$type == "recovered"], sep="")),
                     labels = c("Active", "Confirmed", "Deceased", "Recovered")) +
-  theme( plot.margin = margin(0, 0, 0, 0, "pt"),
+  theme( #plot.margin = margin(0, 0, 0, 0, "pt"),
          legend.position = c(0.1, 0.8),
          plot.title = element_text(size= 16, hjust=0.1, color = "#4e4d47")
   ) +
@@ -232,7 +230,7 @@ totals <- totals %>%
          recovered_total = cumsum(recovered),
          deceased_total = cumsum(deceased))
 
-# Distribution of COVID-19 cases worldwide
+# Distribution of COVID-19 Cases
 ggplot(data = totals, aes(x = symptoms_date)) +
   geom_density(aes(y = recovered_total, color = "recovered_col", fill = "recovered_col"), 
                position = "identity", stat = "identity") +
@@ -356,9 +354,9 @@ rm(colors, totals, totals_age, totals_sex, totals_state)
 # until patient gets an outcome
 coronavirus <- coronavirus %>% 
   mutate(outcome_time = ifelse(!is.na(date_of_death), difftime(date_of_death, 
-                                                               symptoms_date, units="days"),
-                               ifelse(!is.na(recovery_date), difftime(recovery_date, 
-                                                                      symptoms_date, units="days"),NA)))
+                                    symptoms_date, units="days"),
+                            ifelse(!is.na(recovery_date), difftime(recovery_date, 
+                                          symptoms_date, units="days"),NA)))
 
 # Let's get the number of deceased and recovered with outcome_time 
 # greater and smaller than 14
@@ -377,7 +375,8 @@ coronavirus %>% filter((outcome=="recovered" | outcome=="deceased") & !is.na(out
   summarise(total_cases = n()) %>%
   ungroup() %>%
   arrange(outcome_time) %>%
-  pivot_wider(names_from = outcome, values_from = total_cases, values_fill = list(total_cases = 0)) %>%
+  pivot_wider(names_from = outcome, values_from = total_cases, 
+              values_fill = list(total_cases = 0)) %>%
   ggplot(aes(x = outcome_time)) +
   geom_line(aes(y = recovered, color = "recovered_col"), 
                position = "identity", stat = "identity") +
@@ -584,12 +583,6 @@ train_knn$bestTune
 
 ggplot(train_knn)
 
-# Variable of importance
-imp <- as.data.frame(varImp(train_knn)$importance)
-imp <- data.frame(overall = imp$recovered,
-                  names   = rownames(imp))
-imp %>% arrange(-overall) %>% head()
-
 y_hat <- predict(train_knn, test_set, type="raw")
 
 # Confusion Matrix
@@ -612,7 +605,7 @@ set.seed(19, sample.kind="Rounding")
 # Fit rpart model
 train_rpart <- train(outcome ~ ., 
                      method = "rpart",
-                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)),
+                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 10)),
                      data = train_set)
 
 # Best tuning parameter and plot
@@ -621,7 +614,7 @@ train_rpart$bestTune
 ggplot(train_rpart)
 
 #To see the resulting tree we access the finalModel and plot it:
-fancyRpartPlot(train_rpart$finalModel)
+fancyRpartPlot(train_rpart$finalModel, space=0, yspace=0, tweak=1, under.cex=1, gap=0)
 
 # Variable of importance
 imp <- as.data.frame(varImp(train_rpart)$importance)
@@ -643,7 +636,6 @@ cm_results <- bind_rows(cm_results,
 # Print the results
 cm_results
 
-
 ###################################
 ##### Random Forest #####
 
@@ -657,7 +649,7 @@ imp <- as.data.frame(varImp(train_rf))
 imp <- data.frame(overall = imp$Overall,
                   names   = rownames(imp))
 imp[order(imp$overall,decreasing = T),]
-varImpPlot(train_rf, main = "Random Forest Variable importance")
+varImpPlot(train_rf, main = "Random Forest Variable Importance")
 
 y_hat <- predict(train_rf, test_set)
 
@@ -673,241 +665,54 @@ cm_results <- bind_rows(cm_results,
 # Print the results
 cm_results
 
-
-
-
-
-
-
-
-
-train_rf <- train(Survived ~ ., method = "rf", tuneGrid = data.frame(mtry = seq(1, 7)), data = train_set, ntree = 100)
-
+# Cleaning objects we won't use
+rm(train_glm, control, train_knn, train_rpart, train_rf, y_hat)
 
 ###################################
-##### Random Forest #####
-control <- trainControl(method="cv", number = 5, p = 0.8, verboseIter = TRUE)
-grid <- expand.grid(minNode = c(1) , predFixed = c(2, 4, 6))
+## Final Prediction ##
+###################################
 
-train_rf <-  train(outcome~.,
-                   data = train_set,
-                   method = "Rborist", 
-                   nTree = 50,
-                   trControl = control,
-                   tuneGrid = grid,
-                   nSamp = 5000)
-
-ggplot(train_rf)
-
-train_rf$bestTune
-
-fit_rf <- Rborist(train_set[,-7],
-                  train_set[,7],
-                  nTree = 1000,
-                  minNode = train_rf$bestTune$minNode,
-                  predFixed = train_rf$bestTune$predFixed)
-
-y_hat_rf <- factor(levels(test_set$outcome)[predict(fit_rf, test_set[,-7])$yPred])
-y_hat_rf <- y_hat_rf%>%factor(levels = c("recovered","deceased"))
-
-cm <- confusionMatrix(y_hat_rf, test$outcome)
-
-cm_results <- bind_rows(cm_results,
-                        tibble(Model = "RBORIST", 
-                               Accuracy = cm$overall["Accuracy"], 
-                               Sensitivity = cm$byClass["Sensitivity"],
-                               Specificity = cm$byClass["Specificity"]))
-# Print the results
-cm_results
-
-
-
-
-
-
-
-
-
-
-
-# Remove unused cols
-coronavirus <- within(coronavirus, rm(record_date, municipality_code, web_date, recovery_type))
-
-
-# Mutate outcome to change to NA those cases we don't know the outcome yet
-coronavirus[,'outcome'] <- ifelse(coronavirus[,'outcome'] == "recovered", "recovered", 
-                                  ifelse(coronavirus[,'outcome'] == "deceased", "deceased", 
-                                         ifelse(coronavirus[,'outcome'] == "icu", NA, 
-                                                ifelse(coronavirus[,'outcome'] == "hospitalized", NA, 
-                                                       ifelse(coronavirus[,'outcome'] == "outpatientCare", NA, NA))))) 
-coronavirus[,'outcome'] <- factor(coronavirus$outcome, levels = c("recovered","deceased"))
-
-
-coronavirus <- coronavirus %>% 
-  #mutate(outcome_time = ifelse(!is.na(date_of_death), difftime(date_of_death, symptoms_date, units="days"),
-  #                             ifelse(!is.na(recovery_date), difftime(recovery_date, symptoms_date, units="days"),NA)),
-  #       diagnosis_time = ifelse(!is.na(diagnosis_date), difftime(diagnosis_date, symptoms_date, units="days"),NA)) %>%
-  select(id, state, age, sex, contagion_type, symptoms_date, diagnosis_time, outcome_time, outcome)
-
-str(coronavirus)
-dim(coronavirus)
-
-# Remove NAs
-coronavirus <- coronavirus[complete.cases(coronavirus[ , c(1:7)]),]
-
-# Filter out rows with and outcome and no outcome_time nor diagnosis_time
-coronavirus <- coronavirus %>% 
-  filter((!is.na(outcome) & !is.na(outcome_time) & !is.na(diagnosis_time)) |
-           is.na(outcome))
-
-dim(coronavirus)
-
-#--------------------
-# Training & validation sets
-# Predict outcome of Active cases is.na(outcome)
-#--------------------
-training <- coronavirus %>% filter(!is.na(outcome))
-validation <- coronavirus %>% filter(is.na(outcome))
-
-dim(training)
-dim(validation)
-
-#--------------------
-# Training 
-
-set.seed(19)
-index <- createDataPartition(training$outcome, times = 1, p = 0.2, list=FALSE)
-train <- training[-index,]
-test  <- training[index,]
-
-# Remove symptoms_date
-train <- train %>% select(-id,-symptoms_date,-diagnosis_date)
-test <- test %>% mutate(outcome_time = as.integer(difftime(Sys.Date(), symptoms_date, units="days")))%>% 
-  select(-id,-symptoms_date,-diagnosis_date)
-
-dim(train)
-dim(test)
-
-#-----------------------
-# Models
-#-----------------------
-
-# logistic regression
-train_out <- train %>% mutate(outcome = as.numeric(outcome == "recovered"))
-
-glm <- glm(outcome ~ ., data = train_out)
-p_hat <- predict(glm , test) 
-y_hat <- factor(ifelse(p_hat > 0.5, "recovered", "deceased"))%>% factor(levels = c("recovered","deceased"))
-
-cm <- confusionMatrix(y_hat, test$outcome)
-cm$overall["Accuracy"]
-
-
-#-----------------------
-# knn
-
-set.seed(19)
-control <- trainControl(method = "cv", number = 10, p = .9)
-train_knn <- train(outcome ~ ., 
-                   data = train,
-                   method = "knn", 
-                   tuneGrid = data.frame(k = c(3,5,7)),
-                   trControl = control)
-ggplot(train_knn)
-
-y_hat_knn <- predict(train_knn, test, type="raw")
-cm <- confusionMatrix(y_hat_knn, test$outcome)
-cm$overall["Accuracy"]
-
-#-------------------
-# Regression Trees
-
-set.seed(19)
-train_rpart <- train(outcome ~ ., 
-                     method = "rpart",
-                     tuneGrid = data.frame(cp = seq(0, 0.05, len = 25)),
-                     data = train)
-ggplot(train_rpart)
-
-#To see the resulting tree we access the finalModel and plot it:
-plot(train_rpart$finalModel)
-text(train_rpart$finalModel)
-
-# VARIABLE IMPORTANCE
-#varImp(train_rpart, scale=TRUE)
-train_rpart
-
-tree_rpart <- rpart(
-  outcome ~ .,
-  data = train, 
-  cp = 0.004166667
-)
-
-train_rpart_summary <- data.frame(
-  variable = names(tree_rpart$variable.importance), 
-  importance = tree_rpart$variable.importance, 
-  stringsAsFactors = FALSE, 
-  row.names = NULL
-) %>% 
-  arrange(desc(importance))
-
-train_rpart_summary
-#---------------------------
-
-y_hat_rpart = predict(train_rpart, test)
-
-cm <- confusionMatrix(y_hat_rpart, test$outcome)
-cm$overall["Accuracy"]
-
-#----------------------
-# Random Forest
-control <- trainControl(method="cv", number = 5, p = 0.8, verboseIter = TRUE)
-grid <- expand.grid(minNode = c(1) , predFixed = c(2, 4, 6))
-
-train_rf <-  train(outcome~.,
-                   data = train,
-                   method = "Rborist", 
-                   nTree = 50,
-                   trControl = control,
-                   tuneGrid = grid,
-                   nSamp = 5000)
-
-ggplot(train_rf)
-
-train_rf$bestTune
-
-fit_rf <- Rborist(train[,-7],
-                  train[,7],
-                  nTree = 1000,
-                  minNode = train_rf$bestTune$minNode,
-                  predFixed = train_rf$bestTune$predFixed)
-
-y_hat_rf <- factor(levels(test$outcome)[predict(fit_rf, test[,-7])$yPred])
-y_hat_rf <- y_hat_rf%>%factor(levels = c("recovered","deceased"))
-
-cm <- confusionMatrix(y_hat_rf, test$outcome)
-cm$overall["Accuracy"]
-
-#-----------------------------
-# Final Model
-
-# Remove symptoms_date
+# Remove id, symptoms_date and diagnosis_date
 training <- training %>% select(-id, -symptoms_date, -diagnosis_date)
-validation_f <- validation %>% mutate(outcome_time = as.integer(difftime(Sys.Date(), symptoms_date, units="days")))%>% 
-  select(-id,-symptoms_date,-diagnosis_date)
 
-# RF was selected 
+# Remove all the cases with an outcom_time and no outcome
+# as this could be bad data
+# calculate the outcome_time with current system date
+prediction <- prediction %>% filter(is.na(outcome_time)) %>% 
+  mutate(outcome_time = as.integer(difftime(Sys.Date(), symptoms_date, units="days")))
+
+# prediction str
+str(prediction)
+
+# Remove id, symptoms_date and diagnosis_date
+prediction_f <- prediction %>% select(-id,-symptoms_date,-diagnosis_date)
+
+# Random Forest was selected 
 # train with whole training dataset
+# removing the outcome column
+final_train_rf <- randomForest(outcome ~ ., data=training)
 
-final_fit_rf <- Rborist(training[,-7],
-                  training[,7],
-                  nTree = 1000,
-                  minNode = train_rf$bestTune$minNode,
-                  predFixed = train_rf$bestTune$predFixed)
+# Variable of importance
+imp <- as.data.frame(varImp(final_train_rf))
+imp <- data.frame(overall = imp$Overall,
+                  names   = rownames(imp))
+imp[order(imp$overall,decreasing = T),]
+varImpPlot(final_train_rf, main = "Final Prediction Variable Importance")
 
-validation$outcome <- factor(levels(validation_f$outcome)[predict(final_fit_rf, validation_f[,-7])$yPred])
-validation[,'outcome'] <- factor(validation$outcome, levels = c("recovered","deceased"))
-#validation <- validation[,-10]
-validation
+prediction$outcome <- factor(levels(prediction_f$outcome)[predict(final_train_rf, prediction_f[,-7])])
 
-validation %>% filter(outcome=="deceased")
+# Cleaning objects we won't use
+rm(prediction_f, imp)
+
+# 6 first rows of prediction dataset including column names
+head(prediction)
+
+# Prediction analysis
+cat("Death rate in training data: ", 
+    round((sum(training$outcome == "deceased")*100)/nrow(training), digits=2), "%", sep="")
+cat("Death rate in prediction data: ", 
+    round((sum(prediction$outcome == "deceased")*100)/nrow(prediction), digits=2), "%", sep="")
+cat("Recovered rate in training data: ", 
+    round((sum(training$outcome == "recovered")*100)/nrow(training), digits=2), "%", sep="")
+cat("Recovered rate in prediction data: ", 
+    round((sum(prediction$outcome == "recovered")*100)/nrow(prediction), digits=2), "%", sep="")
